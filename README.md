@@ -1,0 +1,118 @@
+# Effector `ISkiaShaderEffectFactory` + `RenderTransform` — Content shifts on Android
+
+## Summary
+
+When using Effector's **shader pipeline** (`ISkiaShaderEffectFactory`) on a
+visual that also has a non-identity **`RenderTransform`** (e.g. `ScaleTransform`)
+on **Avalonia + Android**, the visual's original content slides diagonally toward
+the upper-left corner with progressive clipping.  The same code renders correctly
+on Desktop (Linux/Windows/macOS).
+
+**Key finding:** the shader pipeline works perfectly on Android when no
+`RenderTransform` is active.  The bug is triggered by the combination of an
+active Effector shader effect *and* a `RenderTransform` on the same visual.
+
+The **image-filter pipeline** (`ISkiaEffectFactory` returning `SKImageFilter`)
+does **not** exhibit this issue because it avoids the content capture/composite
+code path.
+
+## Environment
+
+| Component | Version |
+|---|---|
+| Effector | 0.2.0 |
+| Avalonia | 11.3.12 |
+| SkiaSharp | 3.119.2 |
+| .NET | 9.0 (Android), 8.0 (Desktop) |
+| Android min SDK | 21 |
+| Test device | *(fill in your device / emulator)* |
+| AOT / Trimming | disabled |
+
+## Steps to reproduce
+
+1. Build and deploy to an **Android device**:
+   ```
+   dotnet build src/Android/Android.csproj -c Debug -m:1
+   dotnet build src/Android/Android.csproj -c Debug -m:1 -t:Install
+   ```
+
+2. **Baseline (effect only, no transform):**
+   - Tap **"Toggle Shader Effect"** — green overlay appears.
+   - Keep the Scale slider at 1.0.
+   - ✅ Content stays centered.  No bug.
+
+3. **Trigger the bug (effect + transform):**
+   - With the shader effect ON, drag the **Scale slider** to 1.3 (or any
+     value ≠ 1.0).
+   - ❌ **Actual:** Content shifts to the upper-left with clipping.
+   - ✅ **Expected:** Content stays centered, only scaled.
+
+4. **Animated repro:**
+   - With the shader effect ON, tap **"▶ Animate Scale Pulse (1→1.3→1)"**.
+   - On Android: the content visibly slides/clips during the animation.
+   - On Desktop: the content scales smoothly with no position shift.
+
+5. **Verify on Desktop** (no bug):
+   ```
+   dotnet build src/Desktop/Desktop.csproj -c Debug -m:1
+   dotnet run --project src/Desktop/Desktop.csproj
+   ```
+   Repeat steps 2–4 — everything works correctly.
+
+## Analysis
+
+The shader pipeline's `DrawMaskedShaderOverlay` (decompiled from
+`EffectorRuntime` in Effector 0.2.0) captures the visual's content to an
+intermediate `SKSurface`, then composites the shader overlay via:
+
+```csharp
+canvas.Save();
+canvas.ResetMatrix();
+canvas.Translate(DeviceEffectBounds.Left, DeviceEffectBounds.Top);
+canvas.ClipRect(intersectedBounds);
+canvas.SaveLayer(intersectedBounds, paint{BlendMode});
+  // draw shader rect
+  canvas.DrawImage(snapshot, 0, 0, paint{DstIn});  // mask to content shape
+canvas.Restore();
+canvas.Restore();
+```
+
+The `ResetMatrix()` call discards the current render transform.  The
+subsequent `Translate(DeviceEffectBounds)` presumably re-positions to where
+the content should be — but on Android, when a `RenderTransform` is active,
+`DeviceEffectBounds` appears to reflect the **pre-transform** position rather
+than the **post-transform** position, causing the content snapshot to be drawn
+at an incorrect offset.
+
+### Observations
+
+- **Shader alone (Scale=1.0):** works on Android ✅
+- **Shader + Scale≠1.0:** content anchor point shifts on Android ❌
+- **No shader + Scale≠1.0:** content scales correctly on Android ✅
+- **Desktop (any combination):** always correct ✅
+
+Specifically on Android, with `RenderTransformOrigin="0.5,0.5"`:
+
+| Shader | Scale | Anchor behavior |
+|---|---|---|
+| OFF | any | Top-left corner of the Border stays fixed. Panel scales from its center within the container. Correct. |
+| ON | 1.0 | Overlay renders. Content stays centered. No issue. |
+| ON | ≠1.0 | **BUG:** The anchor point shifts to near the content's center instead of the Border's top-left staying fixed. The content displaces visibly compared to the same scale without the shader. |
+
+The displacement increases with the scale factor deviation from 1.0.
+
+### Possible root cause
+
+`DeviceEffectBounds` is computed before the `RenderTransform` is factored in,
+or the intermediate surface capture includes the transform but the re-composite
+step (`ResetMatrix` + `Translate`) doesn't apply the same transform, leading to
+a mismatch on Android's GPU pipeline.
+
+## Project structure
+
+```
+src/
+  App/                 Shared Avalonia library (effect + UI)
+  Desktop/             Desktop head (for comparison)
+  Android/             Android head (reproduces the bug)
+```

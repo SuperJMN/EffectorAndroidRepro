@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="EffectorAndroidRepro.MainView">
+    <StackPanel Spacing="16" Margin="24" HorizontalAlignment="Center" VerticalAlignment="Center">
+
+        <TextBlock Text="Effector Shader + RenderTransform Bug"
+                   FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" />
+
+        <TextBlock x:Name="StatusText" HorizontalAlignment="Center" FontSize="12"
+                   Text="Effect OFF, Scale 1.0" />
+
+        <!-- ═══ Test subject: Panel with content + ScaleTransform ═══ -->
+        <Border BorderBrush="Gray" BorderThickness="1" Padding="8"
+                HorizontalAlignment="Center">
+            <Panel x:Name="SpriteHost" Width="200" Height="200"
+                   RenderTransformOrigin="0.5,0.5">
+
+                <!-- Visible content: a colored rectangle with a centered label -->
+                <Border Background="#4488CC" CornerRadius="8">
+                    <TextBlock Text="CONTENT" FontSize="24" FontWeight="Bold"
+                               Foreground="White"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+            </Panel>
+        </Border>
+
+        <!-- Controls -->
+        <StackPanel Spacing="8" HorizontalAlignment="Center">
+            <Button x:Name="ToggleButton" Content="Toggle Shader Effect"
+                    HorizontalAlignment="Center" Click="OnToggleClick" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="Scale:" VerticalAlignment="Center" />
+                <Slider x:Name="ScaleSlider" Width="200" Minimum="0.5" Maximum="1.5"
+                        Value="1.0" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="Progress:" VerticalAlignment="Center" />
+                <Slider x:Name="ProgressSlider" Width="200" Minimum="0" Maximum="1"
+                        Value="0.5" />
+            </StackPanel>
+
+            <Button x:Name="AnimateButton" Content="▶ Animate Scale Pulse (1→1.3→1)"
+                    HorizontalAlignment="Center" Click="OnAnimateClick" />
+        </StackPanel>
+
+        <TextBlock TextWrapping="Wrap" MaxWidth="400" FontSize="11" Foreground="Gray"
+                   Text="Steps to reproduce:&#x0a;1. Tap 'Toggle Shader Effect' (green overlay appears).&#x0a;2. Drag the Scale slider away from 1.0, or tap 'Animate Scale Pulse'.&#x0a;3. On Android the blue CONTENT rect slides diagonally to the upper-left with clipping.&#x0a;4. On Desktop the content stays centered at all scales.&#x0a;&#x0a;The bug is in DrawMaskedShaderOverlay: ResetMatrix → Translate(DeviceEffectBounds) doesn't account for active RenderTransforms on Android GPU." />
+    </StackPanel>
+</UserControl>
