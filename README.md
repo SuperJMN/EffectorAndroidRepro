@@ -16,11 +16,15 @@ The **image-filter pipeline** (`ISkiaEffectFactory` returning `SKImageFilter`)
 does **not** exhibit this issue because it avoids the content capture/composite
 code path.
 
+**Status:** Bug persists in Effector 0.3.0 despite PR#9 (`fix/shader-rendertransform-anchor-shift`).
+The other three workarounds from 0.2.0 (env var, Android patching, Linux native assets) are
+resolved in 0.3.0 and have been removed from this repro.
+
 ## Environment
 
 | Component | Version |
 |---|---|
-| Effector | 0.2.0 |
+| Effector | **0.3.0** |
 | Avalonia | 11.3.12 |
 | SkiaSharp | 3.119.2 |
 | .NET | 9.0 (Android), 8.0 (Desktop) |
@@ -83,6 +87,9 @@ the content should be — but when a `RenderTransform` is active,
 `DeviceEffectBounds` appears to reflect the **pre-transform** position rather
 than the **post-transform** position, causing the content snapshot to be drawn
 at an incorrect offset.  **This affects all platforms, not just Android.**
+
+Effector 0.3.0 (PR#9) added host-bounds tracking on transform mutations and
+visible-area clipping, but the fundamental anchor drift still reproduces.
 
 ### Observations
 

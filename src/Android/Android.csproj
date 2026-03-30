@@ -28,24 +28,4 @@
   <ItemGroup>
     <ProjectReference Include="..\App\App.csproj" />
   </ItemGroup>
-
-  <!-- WORKAROUND: Effector patches Avalonia.Base.dll + Avalonia.Skia.dll in $(TargetDir),
-       but Android bundles assemblies from obj/.../android/assets/{abi}/. Re-run the patcher
-       there so the APK contains the weaved copies. -->
-  <Target Name="Effector_PatchAndroidAssemblies"
-          AfterTargets="_PrepareAssemblies"
-          BeforeTargets="_BuildApkEmbed"
-          Condition="'$(EffectorEnabled)' == 'true' and '$(DesignTimeBuild)' != 'true'
-                     and Exists('$(IntermediateOutputPath)android/assets')">
-    <ItemGroup>
-      <_EffectorAndroidAvaloniaBase Include="$(IntermediateOutputPath)android/assets/*/Avalonia.Base.dll" />
-    </ItemGroup>
-    <PatchAvaloniaAssembliesTask
-        AvaloniaBaseAssemblyPath="%(FullPath)"
-        AvaloniaSkiaAssemblyPath="$([System.IO.Path]::Combine('$([System.IO.Path]::GetDirectoryName(%(FullPath)))', 'Avalonia.Skia.dll'))"
-        Strict="$(EffectorStrict)"
-        Verbose="$(EffectorVerbose)"
-        SupportedAvaloniaVersion="$(EffectorSupportedAvaloniaVersion)"
-        Condition="'%(_EffectorAndroidAvaloniaBase.Identity)' != ''" />
-  </Target>
 </Project>
