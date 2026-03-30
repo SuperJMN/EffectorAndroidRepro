@@ -1,16 +1,16 @@
-# Effector `ISkiaShaderEffectFactory` + `RenderTransform` — Content shifts on Android
+# Effector `ISkiaShaderEffectFactory` + `RenderTransform` — Content anchor shifts (all platforms)
 
 ## Summary
 
 When using Effector's **shader pipeline** (`ISkiaShaderEffectFactory`) on a
-visual that also has a non-identity **`RenderTransform`** (e.g. `ScaleTransform`)
-on **Avalonia + Android**, the visual's original content slides diagonally toward
-the upper-left corner with progressive clipping.  The same code renders correctly
-on Desktop (Linux/Windows/macOS).
+visual that also has a non-identity **`RenderTransform`** (e.g. `ScaleTransform`),
+the content's anchor point shifts incorrectly.  The bug reproduces on **all
+platforms** (Desktop Linux, Android — likely Windows/macOS too).
 
-**Key finding:** the shader pipeline works perfectly on Android when no
-`RenderTransform` is active.  The bug is triggered by the combination of an
-active Effector shader effect *and* a `RenderTransform` on the same visual.
+**Key finding:** the shader pipeline works perfectly when no `RenderTransform`
+is active.  The bug is triggered by the combination of an active Effector shader
+effect *and* a non-identity `RenderTransform` on the same visual.  **Affects all
+platforms** (confirmed on Linux Desktop and Android).
 
 The **image-filter pipeline** (`ISkiaEffectFactory` returning `SKImageFilter`)
 does **not** exhibit this issue because it avoids the content capture/composite
@@ -50,14 +50,14 @@ code path.
 4. **Animated repro:**
    - With the shader effect ON, tap **"▶ Animate Scale Pulse (1→1.3→1)"**.
    - On Android: the content visibly slides/clips during the animation.
-   - On Desktop: the content scales smoothly with no position shift.
+   - On Desktop: **same bug** — anchor point shifts when shader + scale are active.
 
-5. **Verify on Desktop** (no bug):
+5. **Desktop reproduces the same bug:**
    ```
    dotnet build src/Desktop/Desktop.csproj -c Debug -m:1
    dotnet run --project src/Desktop/Desktop.csproj
    ```
-   Repeat steps 2–4 — everything works correctly.
+   Repeat steps 2–4 — the anchor shift is visible on Desktop too.
 
 ## Analysis
 
@@ -79,17 +79,17 @@ canvas.Restore();
 
 The `ResetMatrix()` call discards the current render transform.  The
 subsequent `Translate(DeviceEffectBounds)` presumably re-positions to where
-the content should be — but on Android, when a `RenderTransform` is active,
+the content should be — but when a `RenderTransform` is active,
 `DeviceEffectBounds` appears to reflect the **pre-transform** position rather
 than the **post-transform** position, causing the content snapshot to be drawn
-at an incorrect offset.
+at an incorrect offset.  **This affects all platforms, not just Android.**
 
 ### Observations
 
-- **Shader alone (Scale=1.0):** works on Android ✅
-- **Shader + Scale≠1.0:** content anchor point shifts on Android ❌
-- **No shader + Scale≠1.0:** content scales correctly on Android ✅
-- **Desktop (any combination):** always correct ✅
+- **Shader alone (Scale=1.0):** works ✅
+- **Shader + Scale≠1.0:** content anchor point shifts ❌ **(all platforms)**
+- **No shader + Scale≠1.0:** content scales correctly ✅
+- The displacement increases with the scale factor deviation from 1.0.
 
 Specifically on Android, with `RenderTransformOrigin="0.5,0.5"`:
 
@@ -97,7 +97,7 @@ Specifically on Android, with `RenderTransformOrigin="0.5,0.5"`:
 |---|---|---|
 | OFF | any | Top-left corner of the Border stays fixed. Panel scales from its center within the container. Correct. |
 | ON | 1.0 | Overlay renders. Content stays centered. No issue. |
-| ON | ≠1.0 | **BUG:** The anchor point shifts to near the content's center instead of the Border's top-left staying fixed. The content displaces visibly compared to the same scale without the shader. |
+| ON | ≠1.0 | **BUG:** Anchor point shifts to near the content's center instead of the Border's top-left staying fixed. Content displaces visibly. **Affects all platforms.** |
 
 The displacement increases with the scale factor deviation from 1.0.
 
